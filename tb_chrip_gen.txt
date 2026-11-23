@@ -1,0 +1,59 @@
+library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+
+entity tb_chirp_generator is
+end tb_chirp_generator;
+
+architecture Behavioral of tb_chirp_generator is
+
+    component chirp_generator
+        Port (
+            clk        : in  std_logic;
+            rst_n      : in  std_logic;
+            enable     : in  std_logic;
+            sine_out   : out std_logic_vector(15 downto 0);
+            sine_valid : out std_logic
+        );
+    end component;
+
+    signal clk        : std_logic := '0';
+    signal rst_n      : std_logic := '0';
+    signal enable     : std_logic := '0';
+    signal sine_out   : std_logic_vector(15 downto 0);
+    signal sine_valid : std_logic;
+
+    constant CLK_PERIOD : time := 10 ns;
+
+begin
+
+    uut: chirp_generator
+        port map (
+            clk        => clk,
+            rst_n      => rst_n,
+            enable     => enable,
+            sine_out   => sine_out,
+            sine_valid => sine_valid
+        );
+
+    clk_process : process
+    begin
+        clk <= '0';
+        wait for CLK_PERIOD / 2;
+        clk <= '1';
+        wait for CLK_PERIOD / 2;
+    end process;
+
+    stim_proc : process
+    begin
+        rst_n  <= '0';
+        enable <= '0';
+        wait for 50 ns;
+
+        rst_n  <= '1';
+        wait for 20 ns;
+        enable <= '1';
+
+        wait;
+    end process;
+
+end Behavioral;

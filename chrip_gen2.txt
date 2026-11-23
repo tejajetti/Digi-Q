@@ -1,0 +1,75 @@
+library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+use IEEE.NUMERIC_STD.ALL;
+
+entity chirp_generator is
+    Port (
+        clk        : in  std_logic;
+        rst_n      : in  std_logic;
+        enable     : in  std_logic; -- Driven by prf_out
+        sine_out   : out std_logic_vector(15 downto 0);
+        sine_valid : out std_logic
+    );
+end chirp_generator;
+
+architecture Behavioral of chirp_generator is
+
+    COMPONENT dds_compiler_0
+      PORT (
+        aclk                : IN  STD_LOGIC;
+        s_axis_phase_tvalid : IN  STD_LOGIC;
+        s_axis_phase_tdata  : IN  STD_LOGIC_VECTOR(15 DOWNTO 0);
+        m_axis_data_tvalid  : OUT STD_LOGIC;
+        m_axis_data_tdata   : OUT STD_LOGIC_VECTOR(15 DOWNTO 0) 
+      );
+    END COMPONENT;
+
+    -- 32-bit accumulator: upper 16 bits = phase increment, lower 16 bits = fractional
+    signal pinc_acc      : unsigned(31 downto 0) := to_unsigned(1, 16) & x"0000";
+    signal current_pinc  : std_logic_vector(15 downto 0);
+    signal dds_tvalid_in : std_logic := '0';
+    signal dds_sine_raw  : std_logic_vector(15 downto 0);
+    signal dds_valid_raw : std_logic;
+
+    -- Constants for 16-bit phase width @ 100 MHz
+    constant START_ACC  : unsigned(31 downto 0) := to_unsigned(1, 16) & x"0000";   -- ~1.53 kHz
+    constant STOP_ACC   : unsigned(31 downto 0) := to_unsigned(161, 16) & x"0000"; -- ~245.67 kHz
+    constant CHIRP_STEP : unsigned(31 downto 0) := to_unsigned(105, 32);           -- 99,865 cycles (~1 ms)
+
+begin
+
+    process(clk)
+    begin
+        if rising_edge(clk) then
+            if rst_n = '0' or enable = '0' then
+                -- Reset chirp back to 1.53 kHz whenever PRF is OFF
+                pinc_acc      <= START_ACC;
+                dds_tvalid_in <= '0';
+            else
+                dds_tvalid_in <= '1';
+                -- Sweep up to 245.67 kHz and hold until PRF turns OFF
+                if pinc_acc + CHIRP_STEP >= STOP_ACC then
+                    pinc_acc <= STOP_ACC;
+                else
+                    pinc_acc <= pinc_acc + CHIRP_STEP;
+                end if;
+            end if;
+        end if;
+    end process;
+
+    current_pinc <= std_logic_vector(pinc_acc(31 downto 16));
+
+    dds_inst : dds_compiler_0
+        port map (
+            aclk                => clk,
+            s_axis_phase_tvalid => dds_tvalid_in,
+            s_axis_phase_tdata  => current_pinc,
+            m_axis_data_tvalid  => dds_valid_raw,
+            m_axis_data_tdata   => dds_sine_raw
+        );
+
+    -- Gate output to 0 when PRF is OFF so no residual DDS pipeline data leaks
+    sine_out   <= dds_sine_raw  when (enable = '1' and dds_valid_raw = '1') else (others => '0');
+    sine_valid <= dds_valid_raw when (enable = '1') else '0';
+
+end Behavioral;

@@ -1,0 +1,64 @@
+library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+use IEEE.NUMERIC_STD.ALL;
+use STD.ENV.ALL; -- Required for automatic simulation stop (VHDL-2008)
+
+entity tb_prf_generator is
+end tb_prf_generator;
+
+architecture Behavioral of tb_prf_generator is
+
+    constant CLK_PERIOD : time := 10 ns; -- 100 MHz
+
+    signal clk          : STD_LOGIC := '0';
+    signal rst          : STD_LOGIC := '1';
+    signal enable       : STD_LOGIC := '0';
+    signal total_pulses : STD_LOGIC_VECTOR(31 downto 0) := (others => '0');
+    signal on_pulses    : STD_LOGIC_VECTOR(19 downto 0) := (others => '0');
+    signal prf_out      : STD_LOGIC;
+    signal sample_count : STD_LOGIC_VECTOR(31 downto 0);
+
+begin
+
+    -- Direct Entity Instantiation (No component mismatch issues)
+    uut: entity work.prf_generator
+        port map (
+            clk          => clk,
+            rst          => rst,
+            enable       => enable,
+            total_pulses => total_pulses,
+            on_pulses    => on_pulses,
+            prf_out      => prf_out,
+            sample_count => sample_count
+        );
+
+    -- 100 MHz Clock
+    clk <= not clk after CLK_PERIOD / 2;
+
+    -- Stimulus
+    process
+    begin
+        -- Hold reset for 50 ns
+        rst    <= '1';
+        enable <= '0';
+        wait for 50 ns;
+        
+        rst <= '0';
+        wait for 20 ns;
+
+        -- Set 100 total pulses (1000 ns) and 30 ON pulses (300 ns)
+        total_pulses <= std_logic_vector(to_unsigned(100, 32));
+        on_pulses    <= std_logic_vector(to_unsigned(30, 20));
+        enable       <= '1';
+
+        -- Run until 10th PRF sample completes
+        wait until unsigned(sample_count) = 10;
+        wait for 1000 ns; -- Wait for the 10th PRF period to finish
+
+        enable <= '0';
+        wait for 50 ns;
+
+        finish; -- Automatically stops simulation in Vivado/ModelSim
+    end process;
+
+end Behavioral;

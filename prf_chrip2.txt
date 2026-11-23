@@ -1,0 +1,48 @@
+library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+use IEEE.NUMERIC_STD.ALL;
+
+entity prf_chirp_top is
+    Port (
+        clk          : in  STD_LOGIC; -- 100 MHz
+        rst          : in  STD_LOGIC; -- Active-high reset
+        enable       : in  STD_LOGIC; -- Master system enable
+        total_pulses : in  STD_LOGIC_VECTOR(31 downto 0); -- e.g., 200,000 for 500 Hz PRF
+        on_pulses    : in  STD_LOGIC_VECTOR(19 downto 0); -- 99,865 for 1.53 kHz -> 245.67 kHz sweep
+        prf_out      : out STD_LOGIC;
+        sample_count : out STD_LOGIC_VECTOR(31 downto 0);
+        chirp_out    : out STD_LOGIC_VECTOR(15 downto 0);
+        chirp_valid  : out STD_LOGIC
+    );
+end prf_chirp_top;
+
+architecture Behavioral of prf_chirp_top is
+    signal prf_internal : STD_LOGIC;
+    signal rst_n_int    : STD_LOGIC;
+begin
+
+    rst_n_int <= not rst;
+
+    u_prf : entity work.prf_generator
+        port map (
+            clk          => clk,
+            rst          => rst,
+            enable       => enable,
+            total_pulses => total_pulses,
+            on_pulses    => on_pulses,
+            prf_out      => prf_internal,
+            sample_count => sample_count
+        );
+
+    u_chirp : entity work.chirp_generator
+        port map (
+            clk        => clk,
+            rst_n      => rst_n_int,
+            enable     => prf_internal, -- Chirp runs ONLY while PRF pulse is HIGH
+            sine_out   => chirp_out,
+            sine_valid => chirp_valid
+        );
+
+    prf_out <= prf_internal;
+
+end Behavioral;

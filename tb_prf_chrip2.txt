@@ -1,0 +1,70 @@
+library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+use IEEE.NUMERIC_STD.ALL;
+use STD.ENV.ALL; -- VHDL-2008 automatic finish
+
+entity tb_prf_chirp_top is
+end tb_prf_chirp_top;
+
+architecture Behavioral of tb_prf_chirp_top is
+
+    constant CLK_PERIOD : time := 10 ns; -- 100 MHz
+
+    -- Calculated timing constants for 500 Hz PRF (2 ms period) & 1 ms Chirp
+    constant C_ON_PULSES    : natural := 99865;  -- 998.65 us (1.53 kHz -> 245.67 kHz)
+    constant C_TOTAL_PULSES : natural := 200000; -- 2.00 ms   (500 Hz PRF)
+
+    signal clk          : STD_LOGIC := '0';
+    signal rst          : STD_LOGIC := '1';
+    signal enable       : STD_LOGIC := '0';
+    signal total_pulses : STD_LOGIC_VECTOR(31 downto 0) := (others => '0');
+    signal on_pulses    : STD_LOGIC_VECTOR(19 downto 0) := (others => '0');
+    signal prf_out      : STD_LOGIC;
+    signal sample_count : STD_LOGIC_VECTOR(31 downto 0);
+    signal chirp_out    : STD_LOGIC_VECTOR(15 downto 0);
+    signal chirp_valid  : STD_LOGIC;
+
+begin
+
+    uut: entity work.prf_chirp_top
+        port map (
+            clk          => clk,
+            rst          => rst,
+            enable       => enable,
+            total_pulses => total_pulses,
+            on_pulses    => on_pulses,
+            prf_out      => prf_out,
+            sample_count => sample_count,
+            chirp_out    => chirp_out,
+            chirp_valid  => chirp_valid
+        );
+
+    -- 100 MHz Clock Generation
+    clk <= not clk after CLK_PERIOD / 2;
+
+    -- Stimulus Process
+    process
+    begin
+        rst    <= '1';
+        enable <= '0';
+        wait for 100 ns;
+
+        rst <= '0';
+        wait for 50 ns;
+
+        -- Configure 500 Hz PRF with full 245.67 kHz chirp inside each ON pulse
+        total_pulses <= std_logic_vector(to_unsigned(C_TOTAL_PULSES, 32));
+        on_pulses    <= std_logic_vector(to_unsigned(C_ON_PULSES, 20));
+        enable       <= '1';
+
+        -- Simulate 3 complete PRF + Chirp cycles (6 ms total)
+        wait until unsigned(sample_count) = 3;
+        wait for 2 ms; -- Allow 3rd PRF cycle (1 ms ON + 1 ms OFF) to complete
+
+        enable <= '0';
+        wait for 100 ns;
+
+        finish; -- Automatically stops simulation at ~6.00025 ms
+    end process;
+
+end Behavioral;

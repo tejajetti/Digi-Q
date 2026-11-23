@@ -1,0 +1,73 @@
+library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+use IEEE.NUMERIC_STD.ALL;
+
+entity prf_generator is
+    Port (
+        clk          : in  STD_LOGIC; -- 100 MHz (10 ns period)
+        rst          : in  STD_LOGIC; -- Active-high synchronous reset
+        enable       : in  STD_LOGIC; -- Enable signal
+        total_pulses : in  STD_LOGIC_VECTOR(31 downto 0); -- Total clock cycles per PRF sample
+        on_pulses    : in  STD_LOGIC_VECTOR(19 downto 0); -- ON clock cycles per PRF sample
+        prf_out      : out STD_LOGIC; -- PRF output waveform
+        sample_count : out STD_LOGIC_VECTOR(31 downto 0)  -- Current PRF sample number (1, 2, 3...)
+    );
+end prf_generator;
+
+architecture Behavioral of prf_generator is
+    signal cycle_cnt : unsigned(31 downto 0) := (others => '0');
+    signal samp_cnt  : unsigned(31 downto 0) := (others => '0');
+    signal total_reg : unsigned(31 downto 0) := (others => '0');
+    signal on_reg    : unsigned(31 downto 0) := (others => '0');
+begin
+
+    process(clk)
+        variable v_total : unsigned(31 downto 0);
+        variable v_on    : unsigned(31 downto 0);
+    begin
+        if rising_edge(clk) then
+            if rst = '1' then
+                cycle_cnt <= (others => '0');
+                samp_cnt  <= (others => '0');
+                total_reg <= (others => '0');
+                on_reg    <= (others => '0');
+                prf_out   <= '0';
+            elsif enable = '1' then
+                if cycle_cnt = 0 then
+                    v_total   := unsigned(total_pulses);
+                    v_on      := resize(unsigned(on_pulses), 32);
+                    total_reg <= v_total;
+                    on_reg    <= v_on;
+                    
+                    if v_total > 0 then
+                        samp_cnt <= samp_cnt + 1;
+                    end if;
+                else
+                    v_total := total_reg;
+                    v_on    := on_reg;
+                end if;
+
+                if v_total > 0 then
+                    if cycle_cnt < v_on then
+                        prf_out <= '1';
+                    else
+                        prf_out <= '0';
+                    end if;
+
+                    if cycle_cnt = v_total - 1 then
+                        cycle_cnt <= (others => '0');
+                    else
+                        cycle_cnt <= cycle_cnt + 1;
+                    end if;
+                else
+                    prf_out <= '0';
+                end if;
+            else
+                cycle_cnt <= (others => '0');
+                prf_out   <= '0';
+            end if;
+        end if;
+    end process;
+
+    sample_count <= std_logic_vector(samp_cnt);
+end Behavioral;
